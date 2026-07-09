@@ -1,0 +1,49 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/tmp/
+/grokbuild-proxy
+
+# Test / coverage
+*.test
+*.out
+coverage.*
+*.coverprofile
+
+# Go workspace (local)
+go.work
+go.work.sum
+
+# Config & secrets (keep example)
+config.yaml
+config.yml
+*.local.yaml
+.env
+.env.*
+!.env.example
+
+# Runtime data
+/data/*
+!/data/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+.ccg/
+.claude/
+.cursor/
+.jj/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

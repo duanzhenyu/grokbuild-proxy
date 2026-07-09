@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>grokbuild 管理后台</title>
+  <link rel="stylesheet" href="/admin/ui/app.css?v=4" />
+</head>
+<body>
+  <div id="app">
+    <div id="view-login" class="view hidden">
+      <div class="login-wrap">
+        <div class="card login-card">
+          <div class="login-icon" aria-hidden="true">&#128273;</div>
+          <h1 class="login-title">grokbuild 管理后台</h1>
+          <p class="muted login-desc">输入管理员密钥登录（仅保存在当前浏览器标签页，关闭后失效）</p>
+          <form id="login-form" class="stack">
+            <label class="field">
+              <span class="label">管理员密钥</span>
+              <input id="login-key" type="password" autocomplete="current-password" placeholder="请输入 admin_key" required />
+            </label>
+            <button type="submit" class="btn btn-primary btn-block" id="login-submit">登录</button>
+            <p id="login-error" class="error hidden" role="alert"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-shell" class="view hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">GB</span>
+          <div>
+            <div class="brand-name">grokbuild</div>
+            <div class="brand-sub muted" id="shell-version">管理后台</div>
+          </div>
+        </div>
+        <nav class="nav" id="main-nav" aria-label="主导航">
+          <a href="#/credentials" data-route="credentials">账号凭证</a>
+          <a href="#/clients" data-route="clients">客户端密钥</a>
+          <a href="#/system" data-route="system">系统信息</a>
+          <a href="#/integration" data-route="integration">接入示例</a>
+        </nav>
+        <button type="button" class="btn btn-ghost" id="btn-logout">退出</button>
+      </header>
+
+      <main class="main">
+        <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+        <section id="page-credentials" class="page hidden">
+          <div class="page-head">
+            <div>
+              <h2>账号凭证</h2>
+              <p class="muted">Grok 授权账号池 · 启停 / 优先级 / 刷新令牌 / 账单</p>
+            </div>
+            <div class="row gap">
+              <button type="button" class="btn" id="btn-cred-refresh-list">刷新列表</button>
+              <button type="button" class="btn btn-primary" id="btn-device-login">浏览器登录</button>
+              <button type="button" class="btn btn-primary" id="btn-import-default">导入本机 ~/.grok</button>
+              <button type="button" class="btn" id="btn-import-raw">粘贴 JSON 导入</button>
+            </div>
+          </div>
+          <div id="cred-empty" class="empty card hidden">
+            <h3>暂无凭证</h3>
+            <p class="muted">可从本机默认路径导入，或粘贴 Grok 授权 JSON 文件内容。</p>
+          </div>
+          <div id="cred-list" class="card-grid"></div>
+        </section>
+
+        <section id="page-clients" class="page hidden">
+          <div class="page-head">
+            <div>
+              <h2>客户端密钥</h2>
+              <p class="muted">下游 API 密钥 · 创建时仅展示一次明文</p>
+            </div>
+            <div class="row gap">
+              <button type="button" class="btn" id="btn-client-refresh">刷新</button>
+              <button type="button" class="btn btn-primary" id="btn-client-create">创建密钥</button>
+            </div>
+          </div>
+          <div id="client-empty" class="empty card hidden">
+            <h3>暂无客户端密钥</h3>
+            <p class="muted">创建后会得到一次性明文密钥，用于 OpenAI 兼容客户端或 Claude Code。</p>
+          </div>
+          <div id="client-list" class="table-wrap card"></div>
+        </section>
+
+        <section id="page-system" class="page hidden">
+          <div class="page-head">
+            <div>
+              <h2>系统信息</h2>
+              <p class="muted">进程配置与上游摘要</p>
+            </div>
+            <button type="button" class="btn" id="btn-system-refresh">刷新</button>
+          </div>
+          <div id="system-body" class="card stack"></div>
+        </section>
+
+        <section id="page-integration" class="page hidden">
+          <div class="page-head">
+            <div>
+              <h2>接入示例</h2>
+              <p class="muted">按当前访问地址生成环境变量 · 请把 &lt;客户端密钥&gt; 换成真实 key</p>
+            </div>
+            <button type="button" class="btn btn-primary" id="btn-copy-integration">复制全部</button>
+          </div>
+          <div class="card stack">
+            <label class="field">
+              <span class="label">Claude Code（Anthropic 协议）</span>
+              <pre id="snippet-anthropic" class="code"></pre>
+            </label>
+            <label class="field">
+              <span class="label">OpenAI 兼容接口</span>
+              <pre id="snippet-openai" class="code"></pre>
+            </label>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal shell -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-panel card">
+      <div class="modal-head">
+        <h3 id="modal-title">对话框</h3>
+        <button type="button" class="btn btn-ghost btn-icon" id="modal-close" aria-label="关闭">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-foot" class="modal-foot row gap end"></div>
+    </div>
+  </div>
+
+  <script src="/admin/ui/app.js?v=4" defer></script>
+</body>
+</html>

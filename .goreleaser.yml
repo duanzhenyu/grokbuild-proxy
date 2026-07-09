@@ -1,0 +1,77 @@
+version: 2
+
+project_name: grokbuild-proxy
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: grokbuild-proxy
+    main: ./cmd/grokbuild-proxy
+    binary: grokbuild-proxy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{.Version}}
+
+archives:
+  - id: binaries
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - README_EN.md
+      - DISCLAIMER.md
+      - DESIGN.md
+      - SECURITY.md
+      - CONTRIBUTING.md
+      - COMPATIBILITY.md
+      - CHANGELOG.md
+      - docs/*.md
+      - config.example.yaml
+      - Makefile
+      - scripts/install.sh
+      - scripts/install.ps1
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  prerelease: auto

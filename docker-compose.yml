@@ -1,0 +1,19 @@
+services:
+  grokbuild-proxy:
+    build: .
+    image: grokbuild-proxy:local
+    container_name: grokbuild-proxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - grokbuild-data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      LISTEN: "0.0.0.0:8080"
+      ALLOW_PUBLIC_LISTEN: "true"
+    # Prefer binding only to loopback on the host (see ports above).
+    # Do not expose this proxy to untrusted networks.
+
+volumes:
+  grokbuild-data:

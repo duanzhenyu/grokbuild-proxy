@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check formatting
+        run: test -z "$(gofmt -l ./cmd ./internal)"
+      - name: Vet
+        run: go vet ./...
+      - name: Test with race detector
+        run: go test -race ./...
+      - name: Build
+        run: go build -trimpath ./cmd/grokbuild-proxy
+      - name: Cross-compile release targets
+        run: |
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o /tmp/grokbuild-proxy.exe ./cmd/grokbuild-proxy
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o /tmp/grokbuild-proxy-darwin ./cmd/grokbuild-proxy
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o /tmp/grokbuild-proxy-linux-arm64 ./cmd/grokbuild-proxy
+      - name: Vulnerability scan
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build --build-arg VERSION=ci-${{ github.sha }} -t grokbuild-proxy:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --name grokbuild-proxy-ci \
+            -e LISTEN=0.0.0.0:8080 \
+            -e ALLOW_PUBLIC_LISTEN=true \
+            -p 127.0.0.1:18080:8080 \
+            grokbuild-proxy:ci
+          trap 'docker logs grokbuild-proxy-ci || true; docker rm -f grokbuild-proxy-ci || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
