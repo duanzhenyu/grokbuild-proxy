@@ -176,6 +176,77 @@ func TestUpsertCredentialIsIdempotentAndPreservesHealth(t *testing.T) {
 	}
 }
 
+func TestUpsertCredentialDistinctAccountsSharingSourceKey(t *testing.T) {
+	s := newTestStore(t)
+	// Every Grok CLI account shares the same public client_id, so their SourceKey
+	// (issuer::client_id) is identical. Distinct accounts (different user_id/email)
+	// must not collapse into one on import.
+	shared := "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828"
+	alice, created, err := s.UpsertCredential(CreateCredentialInput{
+		Name:         "alice",
+		Email:        "alice@example.com",
+		UserID:       "user-alice",
+		SourceKey:    shared,
+		OIDCClientID: "b1a00492-073a-47ea-816f-4c329264a828",
+		AccessToken:  "access-alice",
+		RefreshToken: "refresh-alice",
+	})
+	if err != nil || !created {
+		t.Fatalf("alice created=%v err=%v", created, err)
+	}
+	bob, created, err := s.UpsertCredential(CreateCredentialInput{
+		Name:         "bob",
+		Email:        "bob@example.com",
+		UserID:       "user-bob",
+		SourceKey:    shared,
+		OIDCClientID: "b1a00492-073a-47ea-816f-4c329264a828",
+		AccessToken:  "access-bob",
+		RefreshToken: "refresh-bob",
+	})
+	if err != nil || !created {
+		t.Fatalf("bob created=%v err=%v", created, err)
+	}
+	if bob.ID == alice.ID {
+		t.Fatalf("distinct accounts collapsed into one id=%s", bob.ID)
+	}
+	creds, err := s.ListCredentials()
+	if err != nil || len(creds) != 2 {
+		t.Fatalf("want 2 credentials, got %d err=%v", len(creds), err)
+	}
+}
+
+func TestUpsertCredentialSourceKeyFallbackWhenNoStrongIdentity(t *testing.T) {
+	s := newTestStore(t)
+	// With no user_id/email on either side, SourceKey stays the identity of last
+	// resort so token rotation still updates in place instead of duplicating.
+	shared := "https://auth.x.ai::client"
+	first, created, err := s.UpsertCredential(CreateCredentialInput{
+		Name:         "anon",
+		SourceKey:    shared,
+		AccessToken:  "access-one",
+		RefreshToken: "refresh-one",
+	})
+	if err != nil || !created {
+		t.Fatalf("first created=%v err=%v", created, err)
+	}
+	second, created, err := s.UpsertCredential(CreateCredentialInput{
+		Name:         "anon-rotated",
+		SourceKey:    shared,
+		AccessToken:  "access-two",
+		RefreshToken: "refresh-two",
+	})
+	if err != nil || created {
+		t.Fatalf("second created=%v err=%v", created, err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("same-source anon accounts should upsert, first=%s second=%s", first.ID, second.ID)
+	}
+	creds, err := s.ListCredentials()
+	if err != nil || len(creds) != 1 {
+		t.Fatalf("want 1 credential, got %d err=%v", len(creds), err)
+	}
+}
+
 func TestClientKeyCRUDAndHashOnly(t *testing.T) {
 	s := newTestStore(t)
 

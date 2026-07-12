@@ -238,7 +238,12 @@ func sameCredentialIdentity(c Credential, in CreateCredentialInput) bool {
 	if in.Email != "" && c.Email != "" && strings.EqualFold(c.Email, in.Email) {
 		return in.OIDCClientID == "" || c.OIDCClientID == "" || c.OIDCClientID == in.OIDCClientID
 	}
-	if in.SourceKey != "" && c.SourceKey == in.SourceKey {
+	// SourceKey (issuer::client_id) is not a stable account identity: every Grok
+	// CLI account shares the same public client_id, so distinct accounts collide
+	// on SourceKey. Only fall back to it when neither side carries a stronger
+	// identity (user_id/email), otherwise different accounts would overwrite.
+	if in.SourceKey != "" && c.SourceKey == in.SourceKey &&
+		in.UserID == "" && c.UserID == "" && in.Email == "" && c.Email == "" {
 		return true
 	}
 	return in.RefreshToken != "" && c.RefreshToken == in.RefreshToken
