@@ -181,6 +181,7 @@ ghcr.io/greygung/grokbuild-proxy
 | `data_dir` | 凭据、客户端密钥和启动密钥目录 |
 | `api_key` | 客户端 API 鉴权；留空自动生成 |
 | `admin_key` | Admin API/UI 鉴权；留空自动生成 |
+| `outbound_proxy` | 出站代理（上游请求 + OAuth），支持 http/https/socks5/socks5h；留空沿用环境变量代理 |
 | `upstream.*` | Grok CLI 上游地址与客户端请求头 |
 | `oauth.*` | xAI OAuth Issuer、Client、Scope 和回调 |
 | `anthropic.model_aliases` | Claude 模型到 Grok 模型的映射 |

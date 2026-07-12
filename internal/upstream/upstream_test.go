@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -327,6 +329,44 @@ func TestNewClientDefaults(t *testing.T) {
 	cfg := c.Config()
 	if cfg.TokenAuth != DefaultTokenAuth || cfg.ClientVersion != DefaultClientVersion {
 		t.Errorf("%+v", cfg)
+	}
+}
+
+func TestNewClientUsesProxy(t *testing.T) {
+	var proxied int32
+	// A plaintext http target makes the client send an absolute-URI request to
+	// the proxy, so this fake proxy answers directly and proves traffic routed
+	// through it rather than dialing the (unresolvable) target host.
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&proxied, 1)
+		if !r.URL.IsAbs() {
+			t.Errorf("expected absolute proxied URI, got %q", r.URL.String())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data":   []map[string]any{{"id": "grok-4.5", "api_backend": "responses"}},
+		})
+	}))
+	t.Cleanup(proxy.Close)
+
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewClient(Config{
+		BaseURL: "http://models.invalid/v1",
+		Proxy:   http.ProxyURL(proxyURL),
+	})
+	list, err := c.ListModels(context.Background(), "tok")
+	if err != nil {
+		t.Fatalf("ListModels via proxy: %v", err)
+	}
+	if list.Find("grok-4.5") == nil {
+		t.Fatal("missing grok-4.5 from proxied response")
+	}
+	if atomic.LoadInt32(&proxied) == 0 {
+		t.Fatal("proxy was not used")
 	}
 }
 

@@ -22,6 +22,7 @@ type Config struct {
 	APIKey            string          `yaml:"api_key"`
 	AdminKey          string          `yaml:"admin_key"`
 	AllowPublicListen bool            `yaml:"allow_public_listen"`
+	OutboundProxy     string          `yaml:"outbound_proxy"`
 	Upstream          UpstreamConfig  `yaml:"upstream"`
 	OAuth             OAuthConfig     `yaml:"oauth"`
 	ChatBackend       string          `yaml:"chat_backend"`
@@ -91,6 +92,7 @@ func Default() Config {
 		APIKey:            "",
 		AdminKey:          "",
 		AllowPublicListen: false,
+		OutboundProxy:     "",
 		Upstream: UpstreamConfig{
 			BaseURL:          "https://cli-chat-proxy.grok.com/v1",
 			ClientVersion:    "0.2.93",
@@ -206,6 +208,9 @@ func (c Config) Validate() error {
 	if c.Upstream.BaseURL == "" {
 		return fmt.Errorf("upstream.base_url must not be empty")
 	}
+	if _, err := parseOutboundProxy(c.OutboundProxy); err != nil {
+		return err
+	}
 	if u, err := url.Parse(c.Upstream.BaseURL); err != nil || u.Scheme != "https" || u.Host == "" {
 		return fmt.Errorf("upstream.base_url must be an absolute https URL")
 	}
@@ -258,6 +263,37 @@ func (c Config) Validate() error {
 // RequestTimeout returns the configured HTTP request timeout as a duration.
 func (c Config) RequestTimeout() time.Duration {
 	return time.Duration(c.Limits.RequestTimeoutSec) * time.Second
+}
+
+// OutboundProxyURL returns the parsed outbound proxy URL, or nil when unset.
+// A nil result means outbound requests fall back to environment proxies.
+func (c Config) OutboundProxyURL() (*url.URL, error) {
+	return parseOutboundProxy(c.OutboundProxy)
+}
+
+// parseOutboundProxy validates and parses the outbound proxy URL. An empty
+// string is valid and yields a nil URL (no explicit proxy). Supported schemes
+// match net/http Transport: http, https, socks5 and socks5h.
+func parseOutboundProxy(raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return nil, fmt.Errorf("outbound_proxy must be a URL like scheme://host:port")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		return nil, fmt.Errorf("outbound_proxy scheme %q must be http, https, socks5, or socks5h", u.Scheme)
+	}
+	if port := u.Port(); port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return nil, fmt.Errorf("outbound_proxy has an invalid port")
+		}
+	}
+	return u, nil
 }
 
 // ValidateListen enforces loopback-first operation. Public binds require an

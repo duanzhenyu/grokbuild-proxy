@@ -286,6 +286,43 @@ func TestResolveModel(t *testing.T) {
 	}
 }
 
+func TestOutboundProxyURL(t *testing.T) {
+	cfg := Default()
+	if u, err := cfg.OutboundProxyURL(); err != nil || u != nil {
+		t.Fatalf("empty proxy: u=%v err=%v", u, err)
+	}
+	for _, raw := range []string{
+		"http://127.0.0.1:3128",
+		"https://proxy.local:8443",
+		"socks5://127.0.0.1:1080",
+		"socks5h://user:pass@10.0.0.1:1080",
+	} {
+		cfg.OutboundProxy = raw
+		u, err := cfg.OutboundProxyURL()
+		if err != nil || u == nil {
+			t.Fatalf("%s: u=%v err=%v", raw, u, err)
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("%s should validate: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{
+		"ftp://host:21",
+		"socks4://host:1080",
+		"http://",
+		"not-a-url",
+		"http://127.0.0.1:70000",
+	} {
+		cfg.OutboundProxy = raw
+		if _, err := cfg.OutboundProxyURL(); err == nil {
+			t.Fatalf("%s should be rejected", raw)
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("%s should fail validation", raw)
+		}
+	}
+}
+
 func TestDurationHelpers(t *testing.T) {
 	cfg := Default()
 	if cfg.RequestTimeout() != 600*time.Second {

@@ -80,8 +80,21 @@ func main() {
 	cfg.APIKey = apiKey
 	cfg.AdminKey = adminKey
 
+	proxyURL, err := cfg.OutboundProxyURL()
+	if err != nil {
+		fail(logger, "outbound_proxy_invalid", err)
+	}
+	proxyFunc := http.ProxyFromEnvironment
+	if proxyURL != nil {
+		proxyFunc = http.ProxyURL(proxyURL)
+		// Host excludes any userinfo; never log full proxy URL (may hold creds).
+		logger.Info("outbound_proxy_enabled", "scheme", proxyURL.Scheme, "host", proxyURL.Host)
+	}
+
+	oauthTransport := http.DefaultTransport.(*http.Transport).Clone()
+	oauthTransport.Proxy = proxyFunc
 	oauth := &auth.OAuthClient{
-		HTTPClient: &http.Client{Timeout: cfg.RequestTimeout()},
+		HTTPClient: &http.Client{Timeout: cfg.RequestTimeout(), Transport: oauthTransport},
 		Issuer:     cfg.OAuth.Issuer,
 		ClientID:   cfg.OAuth.ClientID,
 		Scope:      cfg.OAuth.Scope,
@@ -99,6 +112,7 @@ func main() {
 		TokenAuth:        cfg.Upstream.TokenAuth,
 		UserAgent:        cfg.Upstream.UserAgent,
 		RequestTimeout:   cfg.RequestTimeout(),
+		Proxy:            proxyFunc,
 	})
 
 	selector := lb.New(cfg.LB).SetHealthStore(store)

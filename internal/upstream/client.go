@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -33,6 +34,9 @@ type Config struct {
 	// RequestTimeout bounds connection establishment and response headers.
 	// Streaming bodies remain governed by the request context.
 	RequestTimeout time.Duration
+	// Proxy selects an outbound proxy per request (http/https/socks5/socks5h).
+	// When nil, environment proxies are honored. Ignored when HTTPClient is set.
+	Proxy func(*http.Request) (*url.URL, error)
 	// HTTPClient overrides the transport. When nil, a sensible default is used.
 	HTTPClient *http.Client
 }
@@ -52,10 +56,14 @@ func NewClient(cfg Config) *Client {
 		if timeout <= 0 {
 			timeout = 30 * time.Second
 		}
+		proxy := cfg.Proxy
+		if proxy == nil {
+			proxy = http.ProxyFromEnvironment
+		}
 		hc = &http.Client{
 			Timeout: 0, // per-request context controls deadlines; streams must not have a client-wide timeout
 			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
+				Proxy:                 proxy,
 				ForceAttemptHTTP2:     true,
 				MaxIdleConns:          32,
 				IdleConnTimeout:       90 * time.Second,
