@@ -792,6 +792,128 @@
     openModal("导入 Grok JSON", body, [cancel, ok]);
   }
 
+  function openImportFilesPicker() {
+    var input = $("import-files-input");
+    if (!input) return;
+    input.value = ""; // reset so re-selecting the same file re-triggers change
+    input.click();
+  }
+
+  function handleImportFilesChange(evt) {
+    var input = evt && evt.target;
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) return;
+    importFilesSequentially(files);
+  }
+
+  function readFileText(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(String(reader.result || ""));
+      };
+      reader.onerror = function () {
+        reject(new Error("读取失败"));
+      };
+      reader.onabort = function () {
+        reject(new Error("读取中断"));
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  var importingFiles = false;
+
+  // Import multiple JSON files one at a time, each posted to import-grok, then
+  // summarize per-file created/updated/failed. Sequential keeps ordering stable
+  // and avoids hammering the backend for a typically small account pool.
+  function importFilesSequentially(files) {
+    if (importingFiles) {
+      toast("正在导入中，请稍候…", "err");
+      return;
+    }
+    importingFiles = true;
+    var totals = { created: 0, updated: 0, failed: 0 };
+    var rows = [];
+    toast("正在导入 " + files.length + " 个文件…", "ok");
+    var chain = Promise.resolve();
+    files.forEach(function (file) {
+      chain = chain.then(function () {
+        return readFileText(file)
+          .then(function (text) {
+            var parsed;
+            try {
+              parsed = JSON.parse(text);
+            } catch (e) {
+              totals.failed += 1;
+              rows.push({ name: file.name, error: "JSON 无效: " + e.message });
+              return;
+            }
+            return api("POST", "/admin/credentials/import-grok", { raw: parsed })
+              .then(function (data) {
+                var c = (data && data.created) || 0;
+                var u = (data && data.updated) || 0;
+                var f = (data && data.failed) || 0;
+                totals.created += c;
+                totals.updated += u;
+                totals.failed += f;
+                rows.push({ name: file.name, created: c, updated: u, failed: f });
+              })
+              .catch(function (err) {
+                totals.failed += 1;
+                rows.push({ name: file.name, error: err.message });
+              });
+          })
+          .catch(function (err) {
+            totals.failed += 1;
+            rows.push({ name: file.name, error: err.message });
+          });
+      });
+    });
+    chain
+      .then(function () {
+        showImportFilesResult(totals, rows);
+        loadCredentials();
+      })
+      .catch(function (err) {
+        toast("导入汇总失败: " + err.message, "err");
+      })
+      .finally(function () {
+        importingFiles = false;
+      });
+  }
+
+  function showImportFilesResult(totals, rows) {
+    var body = el("div", "import-result stack");
+    body.appendChild(
+      el(
+        "p",
+        "",
+        "新增 " + totals.created + " · 更新 " + totals.updated + " · 失败 " + totals.failed
+      )
+    );
+    var list = el("div", "stack");
+    rows.forEach(function (r) {
+      if (r.error) {
+        list.appendChild(el("p", "error", r.name + " — " + r.error));
+      } else {
+        list.appendChild(
+          el(
+            "p",
+            "muted",
+            r.name + " — 新增 " + r.created + " · 更新 " + r.updated + " · 失败 " + r.failed
+          )
+        );
+      }
+    });
+    body.appendChild(list);
+
+    var ok = el("button", "btn btn-primary", "关闭");
+    ok.type = "button";
+    ok.addEventListener("click", closeModal);
+    openModal("批量导入结果", body, [ok]);
+  }
+
   // ---------- Clients ----------
 
   function loadClients() {
@@ -1091,6 +1213,11 @@
 
     var impRaw = $("btn-import-raw");
     if (impRaw) impRaw.addEventListener("click", openImportRawModal);
+
+    var impFiles = $("btn-import-files");
+    if (impFiles) impFiles.addEventListener("click", openImportFilesPicker);
+    var impFilesInput = $("import-files-input");
+    if (impFilesInput) impFilesInput.addEventListener("change", handleImportFilesChange);
 
     var clientRefresh = $("btn-client-refresh");
     if (clientRefresh) clientRefresh.addEventListener("click", loadClients);

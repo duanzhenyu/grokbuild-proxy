@@ -773,3 +773,7 @@ td code {
     grid-template-columns: 1fr;
   }
 }
+
+.import-result p {
+  margin: 0;
+}
